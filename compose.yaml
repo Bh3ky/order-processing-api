@@ -1,0 +1,45 @@
+services:
+  api:
+    # Build the API image using the Dockerfile in the current directory
+    build:
+      context: .
+
+    ports:
+      # Expose the FastAPI/Uvicorn port to our host machine
+      - "8000:8000"
+
+    depends_on:
+      db:
+        # First check PostgreSQL healthy reports
+        condition: service_healthy
+
+  db:
+    # Pin PostgreSQL version
+    image: postgres:17
+
+    environment:
+      POSTGRES_DB: order_processing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      # host:container
+      - "5432:5432"
+
+    volumes:
+      # Persist database files outside the container's writable layer
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      # pg_isready checks whether PostgreSQL is accepting connections
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d order_processing",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
