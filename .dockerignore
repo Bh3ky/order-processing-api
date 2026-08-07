@@ -1,0 +1,27 @@
+# Git metadata is not required inside the container.
+.git
+.gitignore
+
+# Local Python environment and caches.
+.venv
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration must never become part of the image.
+.env
+.env.*
+
+# IDE / operating-system files.
+.vscode/
+.idea/
+.DS_Store
+
+# Test and coverage output.
+.coverage
+htmlcov/
+
+# Local logs.
+*.log
