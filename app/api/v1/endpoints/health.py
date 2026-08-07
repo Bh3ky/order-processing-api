@@ -1,18 +1,28 @@
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database.dependencies import get_db_session
 
 # TODO: Implement each feature's own router.
 # The main application will later include this router under the "/api/v1" prefix.
 router = APIRouter()
 
 @router.get("/health", tags=["Health"])
-async def health_check() -> dict[str, str]:
+async def health_check(
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+) -> dict[str, str]:
     """
-    Health check endpoint
+    Temporarily, verify that API process and PostgreSQL connection are healthy.
+    """
+    await session.execute(text("SELECT 1"))
 
-    This endpoint is used by load balancers, container orchestrators
-    (e.g., Docker or Kubernetes), and monitoring systems to verify that
-    the API process is running and able to serve requests.
-    """
     return {
         "status": "healthy",
+        "database": "connected",
     }

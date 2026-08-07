@@ -6,18 +6,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     Central application configuration.
-
-    Values are loaded from environment variables or a env file.
-    Pydantic automatically validates and converts them to the
-    appropriate Python types.
     """
 
     # Application metadata
     app_name: str = "Order Processing API"
     app_version: str = "1.0.0"
-
-    # Development settings
     debug: bool = False
+
+    # PostgreSQL connection URL used by SQLAlchemy
+    database_url: str
 
     # Tell Pydantic where to load environment variables from
     model_config = SettingsConfigDict(
@@ -30,9 +27,6 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Return a cached instance of the Settings.
-
-    Configuration should only be loaded once during the
-    application's lifetime.
     """
     return Settings()
 
