@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, Numeric, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
 
@@ -18,6 +18,14 @@ class Product(Base):
             "price > 0",
             name="ck_products_price_non_negative",
         ),
+    )
+
+    # TODO: add relationship between product and inventory
+    # One product has one inventory record. 
+    # back_populates links this attribute with Inventory.product, 
+    # allowing navigation in both directions.
+    inventory: Mapped["Inventory"] = relationship(
+        back_populates="product",
     )
 
     # Technical identifier used internally by the application
