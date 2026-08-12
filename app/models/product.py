@@ -16,7 +16,7 @@ class Product(Base):
     __table_args__ = (
         CheckConstraint(
             "price > 0",
-            name="ck_products_price_non_negative",
+            name="ck_products_price_positive",
         ),
     )
 

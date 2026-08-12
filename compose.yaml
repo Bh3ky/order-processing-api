@@ -11,6 +11,10 @@ services:
       # Expose the FastAPI/Uvicorn port to our host machine
       - "8000:8000"
 
+    volumes:
+      # Mount the local project into the container for development
+      - .:/app
+
     depends_on:
       db:
         # First check PostgreSQL healthy reports

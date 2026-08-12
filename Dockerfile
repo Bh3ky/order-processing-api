@@ -21,6 +21,10 @@ RUN uv sync --frozen --no-install-project
 # Copy the application source
 COPY app ./app
 
+# Copy Alembic migration configuration and scripts
+COPY alembic.ini ./
+COPY alembic ./alembic
+
 # Document the port on which the FastAPI application listens
 EXPOSE 8000
 

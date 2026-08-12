@@ -11,3 +11,8 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.51",
     "uvicorn>=0.52.1",
 ]
+
+[dependency-groups]
+dev = [
+    "alembic>=1.19.1",
+]
