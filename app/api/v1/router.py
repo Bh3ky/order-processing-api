@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health
+from app.api.v1.endpoints import health, orders
 
 router = APIRouter()
 
 router.include_router(health.router)
+router.include_router(orders.router)
