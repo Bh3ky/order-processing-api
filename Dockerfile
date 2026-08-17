@@ -32,4 +32,4 @@ EXPOSE 8000
 #
 # 0.0.0.0 is important inside Docker: binding to 120.0.0.1 would make
 # Uvicorn reachable only from inside the container itself.
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
