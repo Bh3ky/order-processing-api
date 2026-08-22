@@ -14,6 +14,7 @@ services:
     volumes:
       # Mount the local project into the container for development
       - .:/app
+      - api_venv:/app/.venv
 
     depends_on:
       db:
@@ -50,3 +51,4 @@ services:
 
 volumes:
   postgres_data:
+  api_venv:
