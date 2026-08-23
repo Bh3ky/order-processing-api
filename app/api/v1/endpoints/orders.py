@@ -8,8 +8,6 @@ from app.database.dependencies import get_db_session
 from app.models.order import Order
 from app.schemas.order import OrderCreate
 
-
-
 router = APIRouter()
 
 SessionDependency = Annotated[

@@ -1,11 +1,15 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.inventory import Inventory
 
 
 class Product(Base):
@@ -21,18 +25,15 @@ class Product(Base):
     )
 
     # TODO: add relationship between product and inventory
-    # One product has one inventory record. 
-    # back_populates links this attribute with Inventory.product, 
+    # One product has one inventory record.
+    # back_populates links this attribute with Inventory.product,
     # allowing navigation in both directions.
     inventory: Mapped["Inventory"] = relationship(
         back_populates="product",
     )
 
     # Technical identifier used internally by the application
-    id: Mapped[UUID] = mapped_column(
-        primary_key=True,
-        default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
 
     # Business identifier exposed as part of the product catalogue
     sku: Mapped[str] = mapped_column(

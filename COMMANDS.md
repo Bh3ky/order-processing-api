@@ -101,3 +101,21 @@ uv run pytest
 ```bash
 uv run pytest -v
 ```
+
+## Commands to run before commiting
+
+```bash
+uv run ruff check .
+```
+
+```bash
+uv run ruff format --check .
+```
+
+```bash
+uv run pytest
+```
+
+```bash
+uv run ruff format .
+```

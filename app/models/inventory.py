@@ -1,10 +1,14 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.product import Product
 
 
 class Inventory(Base):
@@ -46,6 +50,4 @@ class Inventory(Base):
     )
 
     # ORM-level relationship back to the Project object
-    product: Mapped["Product"] = relationship(
-        back_populates="inventory"
-    )
+    product: Mapped["Product"] = relationship(back_populates="inventory")

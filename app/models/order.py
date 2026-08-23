@@ -1,12 +1,24 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Numeric, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.product import Product
 
 
 class OrderStatus(StrEnum):
@@ -21,7 +33,7 @@ class OrderStatus(StrEnum):
 
 class Order(Base):
     """Customer order.
-    
+
     An order contains one or more OrderItems records and tracks the
     overall monetary value and processing state.
     """
@@ -134,4 +146,3 @@ class OrderItem(Base):
 
     # Connect this item to the product being purchased
     product: Mapped["Product"] = relationship()
-
