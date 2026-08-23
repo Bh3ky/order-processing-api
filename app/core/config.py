@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # PostgreSQL connection URL used by SQLAlchemy
     database_url: str
+    test_database_url: str
 
     # Tell Pydantic where to load environment variables from
     model_config = SettingsConfigDict(
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",  # Ignore unknown environment variables
     )
+
 
 @lru_cache
 def get_settings() -> Settings:

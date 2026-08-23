@@ -10,6 +10,7 @@ from app.database.dependencies import get_db_session
 # The main application will later include this router under the "/api/v1" prefix.
 router = APIRouter()
 
+
 @router.get("/health", tags=["Health"])
 async def health_check(
     session: Annotated[

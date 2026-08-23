@@ -9,7 +9,7 @@ class OrderItemCreate(BaseModel):
     # the client references an existing product
     product_id: UUID
     # orders must contain a positive number of units
-    quantity: int = Field(gt=0) 
+    quantity: int = Field(gt=0)
 
 
 class OrderCreate(BaseModel):
@@ -25,4 +25,3 @@ class OrderResponse(BaseModel):
     total_amount: Decimal
     created_at: datetime
     updated_at: datetime
-
