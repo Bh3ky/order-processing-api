@@ -1,3 +1,5 @@
+import uuid
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
@@ -6,15 +8,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.order import Order
+from app.models.product import Product
 
 
-def test_create_order_returns_201(client: TestClient):
+@pytest.mark.asyncio
+async def test_create_order_returns_201(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-RETURN-201",
+        name="Test Product for 201",
+        price=Decimal("19.99"),
+    )
+
+    db_session.add(product)
+    # send the INSERT to PostgreSQL
+    await db_session.flush()
+
     response = client.post(
         "/api/v1/orders",
         json={
             "items": [
                 {
-                    "product_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "product_id": str(product.id),
                     "quantity": 2,
                 }
             ]
@@ -36,13 +53,18 @@ async def test_create_order_persists_order(
     client: TestClient,
     db_session: AsyncSession,
 ):
+    product = Product(
+        sku="TEST-SKU-PERSIST",
+        name="Persist Test Product",
+        price=Decimal("19.99"),
+    )
+
+    db_session.add(product)
+    await db_session.flush()
+
     response = client.post(
         "/api/v1/orders",
-        json={
-            "items": [
-                {"product_id": "550e8400-e29b-41d4-a716-446655440000", "quantity": 2}
-            ]
-        },
+        json={"items": [{"product_id": str(product.id), "quantity": 2}]},
     )
 
     assert response.status_code == 201
@@ -120,3 +142,126 @@ def test_order_with_invalid_product_id_returns_422(client: TestClient):
     assert response.status_code == 422
     body = response.json()
     assert "detail" in body
+
+
+@pytest.mark.asyncio
+async def test_create_order_with_existing_product(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-001",
+        name="Test Product",
+        price=Decimal("19.99"),
+    )
+
+    # place the ORM object into SQLAlchemy's session
+    db_session.add(product)
+    # sends the INSERT to PostgreSQL inside the current transaction
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 1,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "pending"
+
+
+def test_create_order_with_nonexistent_product(client: TestClient):
+    # generate valid UUID that does not correspond to any product in the database
+    nonexistent_product_id = uuid.uuid4()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(nonexistent_product_id),
+                    "quantity": 1,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 404
+
+    body = response.json()
+    assert "detail" in body
+
+
+@pytest.mark.asyncio
+async def test_nonexistent_product_does_not_create_order(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    nonexistent_product_id = uuid.uuid4()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(nonexistent_product_id),
+                    "quantity": 1,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 404
+
+    # verify that no order was created in the database
+    result = await db_session.execute(select(Order))
+    orders = result.scalars().all()
+    assert orders == []
+
+
+@pytest.mark.asyncio
+async def test_create_order_fails_if_any_product_does_not_exist(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    # create a real product
+    real_product = Product(
+        sku="TEST-SKU-002",
+        name="Real Product",
+        price=Decimal("19.99"),
+    )
+
+    db_session.add(real_product)
+    await db_session.flush()
+
+    # generate a UUID for a nonexistent product
+    nonexistent_product_id = uuid.uuid4()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(real_product.id),
+                    "quantity": 1,
+                },
+                {
+                    "product_id": str(nonexistent_product_id),
+                    "quantity": 1,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 404
+    # verify that no order was created in the database
+    result = await db_session.execute(select(Order))
+    orders = result.scalars().all()
+    assert orders == []
