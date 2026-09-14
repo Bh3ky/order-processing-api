@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.order import Order
+from app.models.order import Order, OrderItem
 from app.models.product import Product
 
 
@@ -43,7 +43,7 @@ async def test_create_order_returns_201(
 
     assert "id" in body
     assert body["status"] == "pending"
-    assert body["total_amount"] == 0
+    assert body["total_amount"] == 39.98
     assert "created_at" in body
     assert "updated_at" in body
 
@@ -265,3 +265,98 @@ async def test_create_order_fails_if_any_product_does_not_exist(
     result = await db_session.execute(select(Order))
     orders = result.scalars().all()
     assert orders == []
+
+
+@pytest.mark.asyncio
+async def test_create_order_persists_order_item(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    # create a real product
+    product = Product(
+        sku="TEST-SKU-003",
+        name="Persist Test Product",
+        price=Decimal("19.99"),
+    )
+
+    # flush it
+    db_session.add(product)
+    await db_session.flush()
+
+    # `POST` /orders
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 1,
+                }
+            ]
+        },
+    )
+
+    # assert response is 201
+    assert response.status_code == 201
+
+    # query OrderItem
+    result = await db_session.execute(select(OrderItem))
+    order_items = result.scalars().all()
+
+    # assert exactly one row exists
+    assert len(order_items) == 1
+
+    order_item = order_items[0]
+
+    assert order_item.product_id == product.id
+    assert order_item.quantity == 1
+    assert order_item.unit_price == Decimal("19.99")
+    assert order_item.line_total == Decimal("19.99")
+
+
+@pytest.mark.asyncio
+async def test_create_order_calculates_total_amount(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product1 = Product(
+        sku="TEST-SKU-004",
+        name="Test Product 1",
+        price=Decimal("19.99"),
+    )
+    product2 = Product(
+        sku="TEST-SKU-005",
+        name="Test Product 2",
+        price=Decimal("5.99"),
+    )
+
+    db_session.add_all([product1, product2])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product1.id),
+                    "quantity": 2,
+                },
+                {
+                    "product_id": str(product2.id),
+                    "quantity": 3,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+
+    result = await db_session.execute(select(Order))
+    persisted_order = result.scalar_one()
+
+    assert persisted_order.total_amount == Decimal("57.95")
+
+    result = await db_session.execute(select(OrderItem))
+    order_items = result.scalars().all()
+
+    assert len(order_items) == 2
