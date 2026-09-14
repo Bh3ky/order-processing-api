@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.dependencies import get_db_session
-from app.models.order import Order
+from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.schemas.order import OrderCreate
 
@@ -26,11 +26,12 @@ async def create_order(
     # product-validation logic
     requested_ids = [item.product_id for item in order.items]
 
-    statement = select(Product.id).where(Product.id.in_(requested_ids))
+    statement = select(Product).where(Product.id.in_(requested_ids))
 
     result = await session.execute(statement)
 
-    found_ids = set(result.scalars().all())
+    products = result.scalars().all()
+    found_ids = {product.id for product in products}
 
     missing_ids = set(requested_ids) - found_ids
 
@@ -39,10 +40,33 @@ async def create_order(
             status_code=404, detail="One or more products were not found."
         )
 
+    products_by_id = {product.id: product for product in products}
+
     new_order = Order(
         status="pending",
         total_amount=Decimal("0.00"),
     )
+
+    order_total = Decimal("0.00")
+
+    for item in order.items:
+        product = products_by_id[item.product_id]
+
+        unit_price = product.price
+        line_total = unit_price * item.quantity
+
+        order_total += line_total
+
+        order_item = OrderItem(
+            product_id=product.id,
+            quantity=item.quantity,
+            unit_price=unit_price,
+            line_total=line_total,
+        )
+
+        new_order.items.append(order_item)
+
+    new_order.total_amount = order_total
 
     session.add(new_order)
     await session.commit()
