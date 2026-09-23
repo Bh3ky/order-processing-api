@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.inventory import Inventory
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 
@@ -22,8 +23,13 @@ async def test_create_order_returns_201(
         price=Decimal("19.99"),
     )
 
-    db_session.add(product)
-    # send the INSERT to PostgreSQL
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    db_session.add_all([product, inventory])
+    # send the INSERTs to PostgreSQL
     await db_session.flush()
 
     response = client.post(
@@ -59,7 +65,12 @@ async def test_create_order_persists_order(
         price=Decimal("19.99"),
     )
 
-    db_session.add(product)
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    db_session.add_all([product, inventory])
     await db_session.flush()
 
     response = client.post(
@@ -155,9 +166,14 @@ async def test_create_order_with_existing_product(
         price=Decimal("19.99"),
     )
 
-    # place the ORM object into SQLAlchemy's session
-    db_session.add(product)
-    # sends the INSERT to PostgreSQL inside the current transaction
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    # place the ORM objects into SQLAlchemy's session
+    db_session.add_all([product, inventory])
+    # sends the INSERTs to PostgreSQL inside the current transaction
     await db_session.flush()
 
     response = client.post(
@@ -279,8 +295,13 @@ async def test_create_order_persists_order_item(
         price=Decimal("19.99"),
     )
 
-    # flush it
-    db_session.add(product)
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    # flush the product and its inventory
+    db_session.add_all([product, inventory])
     await db_session.flush()
 
     # `POST` /orders
@@ -330,7 +351,16 @@ async def test_create_order_calculates_total_amount(
         price=Decimal("5.99"),
     )
 
-    db_session.add_all([product1, product2])
+    inventory1 = Inventory(
+        product=product1,
+        quantity_available=10,
+    )
+    inventory2 = Inventory(
+        product=product2,
+        quantity_available=10,
+    )
+
+    db_session.add_all([product1, product2, inventory1, inventory2])
     await db_session.flush()
 
     response = client.post(
@@ -360,3 +390,198 @@ async def test_create_order_calculates_total_amount(
     order_items = result.scalars().all()
 
     assert len(order_items) == 2
+
+
+@pytest.mark.asyncio
+async def test_create_order_deducts_inventory(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-006",
+        name="Inventory Test Product",
+        price=Decimal("19.99"),
+    )
+
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    db_session.add_all([product, inventory])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 3,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+
+    # reload/check inventory state
+    await db_session.refresh(inventory)
+
+    assert inventory.quantity_available == 7
+
+
+@pytest.mark.asyncio
+async def test_create_order_rejects_insufficient_inventory(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-007",
+        name="Inventory Test Product",
+        price=Decimal("19.99"),
+    )
+
+    inventory = Inventory(
+        product=product,
+        quantity_available=2,
+    )
+
+    db_session.add_all([product, inventory])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 5,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 409
+
+    await db_session.refresh(inventory)
+
+    assert inventory.quantity_available == 2
+
+    result = await db_session.execute(select(Order))
+    orders = result.scalars().all()
+
+    assert len(orders) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_order_does_not_deduct_any_inventory_when_one_item_is_insufficient(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product1 = Product(
+        sku="TEST-SKU-008",
+        name="Test Product 1",
+        price=Decimal("15.99"),
+    )
+    product2 = Product(
+        sku="TEST-SKU-009",
+        name="Test Product 2",
+        price=Decimal("19.99"),
+    )
+
+    inventory1 = Inventory(
+        product=product1,
+        quantity_available=10,
+    )
+
+    inventory2 = Inventory(
+        product=product2,
+        quantity_available=2,
+    )
+
+    db_session.add_all([product1, product2, inventory1, inventory2])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product1.id),
+                    "quantity": 3,
+                },
+                {
+                    "product_id": str(product2.id),
+                    "quantity": 5,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 409
+
+    await db_session.refresh(inventory1)
+    await db_session.refresh(inventory2)
+
+    assert inventory1.quantity_available == 10
+    assert inventory2.quantity_available == 2
+
+    result = await db_session.execute(select(Order))
+    orders = result.scalars().all()
+
+    assert len(orders) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_order_deducts_inventory_for_multiple_products(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product1 = Product(
+        sku="TEST-SKU-010",
+        name="Test Product 1",
+        price=Decimal("15.99"),
+    )
+    product2 = Product(
+        sku="TEST-SKU-011",
+        name="Test Product 2",
+        price=Decimal("19.99"),
+    )
+
+    inventory1 = Inventory(
+        product=product1,
+        quantity_available=10,
+    )
+
+    inventory2 = Inventory(
+        product=product2,
+        quantity_available=8,
+    )
+
+    db_session.add_all([product1, product2, inventory1, inventory2])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product1.id),
+                    "quantity": 3,
+                },
+                {
+                    "product_id": str(product2.id),
+                    "quantity": 5,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+
+    await db_session.refresh(inventory1)
+    await db_session.refresh(inventory2)
+
+    assert inventory1.quantity_available == 7
+    assert inventory2.quantity_available == 3

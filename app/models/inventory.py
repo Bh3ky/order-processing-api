@@ -49,5 +49,5 @@ class Inventory(Base):
         nullable=False,
     )
 
-    # ORM-level relationship back to the Project object
+    # ORM-level relationship back to the Product object
     product: Mapped["Product"] = relationship(back_populates="inventory")
