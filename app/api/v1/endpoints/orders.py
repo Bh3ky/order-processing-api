@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.dependencies import get_db_session
+from app.models.inventory import Inventory
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.schemas.order import OrderCreate
@@ -41,6 +42,33 @@ async def create_order(
         )
 
     products_by_id = {product.id: product for product in products}
+
+    inventory_statement = select(Inventory).where(
+        Inventory.product_id.in_(requested_ids)
+    )
+    inventory_result = await session.execute(inventory_statement)
+    inventories = inventory_result.scalars().all()
+
+    inventories_by_product_id = {
+        inventory.product_id: inventory for inventory in inventories
+    }
+
+    # validate sufficient inventory before modifying any stock
+    for item in order.items:
+        inventory = inventories_by_product_id.get(item.product_id)
+
+        if inventory is None or inventory.quantity_available < item.quantity:
+            # choice: 409 rather than 404; tells us the product exists,
+            # but its current inventory state conflicts with the requested
+            # operation.
+            raise HTTPException(
+                status_code=409,
+                detail="Insufficient inventory for one or more products.",
+            )
+
+    for item in order.items:
+        inventory = inventories_by_product_id[item.product_id]
+        inventory.quantity_available -= item.quantity
 
     new_order = Order(
         status="pending",
