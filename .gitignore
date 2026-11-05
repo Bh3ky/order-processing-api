@@ -44,3 +44,7 @@ build/
 
 # Logs
 *.log
+
+# Claude Code
+CLAUDE.md
+.claude/
