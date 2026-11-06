@@ -585,3 +585,97 @@ async def test_create_order_deducts_inventory_for_multiple_products(
 
     assert inventory1.quantity_available == 7
     assert inventory2.quantity_available == 3
+
+
+@pytest.mark.asyncio
+async def test_create_order_rejects_duplicate_items_exceeding_stock(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-012",
+        name="Test Product",
+        price=Decimal("29.99"),
+    )
+
+    inventory = Inventory(
+        product=product,
+        quantity_available=5,
+    )
+
+    db_session.add_all([product, inventory])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 4,
+                },
+                {
+                    "product_id": str(product.id),
+                    "quantity": 4,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 409
+
+    await db_session.refresh(inventory)
+
+    assert inventory.quantity_available == 5
+    assert len((await db_session.execute(select(Order))).scalars().all()) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_order_deducts_aggregated_duplicate_items(
+    client: TestClient,
+    db_session: AsyncSession,
+):
+    product = Product(
+        sku="TEST-SKU-013",
+        name="Test Product",
+        price=Decimal("19.99"),
+    )
+
+    inventory = Inventory(
+        product=product,
+        quantity_available=10,
+    )
+
+    db_session.add_all([product, inventory])
+    await db_session.flush()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={
+            "items": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 3,
+                },
+                {
+                    "product_id": str(product.id),
+                    "quantity": 4,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+
+    await db_session.refresh(inventory)
+    assert inventory.quantity_available == 3
+
+    result = await db_session.execute(select(OrderItem))
+    saved_items = result.scalars().all()
+
+    assert sorted(item.quantity for item in saved_items) == [3, 4]
+
+    result = await db_session.execute(select(Order))
+    saved_order = result.scalar_one()
+
+    assert saved_order.total_amount == Decimal("139.93")

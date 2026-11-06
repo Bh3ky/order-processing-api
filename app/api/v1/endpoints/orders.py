@@ -27,6 +27,13 @@ async def create_order(
     # product-validation logic
     requested_ids = [item.product_id for item in order.items]
 
+    requested_quantities = {}
+
+    for item in order.items:
+        requested_quantities[item.product_id] = (
+            requested_quantities.get(item.product_id, 0) + item.quantity
+        )
+
     statement = select(Product).where(Product.id.in_(requested_ids))
 
     result = await session.execute(statement)
@@ -53,11 +60,11 @@ async def create_order(
         inventory.product_id: inventory for inventory in inventories
     }
 
-    # validate sufficient inventory before modifying any stock
-    for item in order.items:
-        inventory = inventories_by_product_id.get(item.product_id)
+    # validate total requested quantities before modifying inventory
+    for product_id, requested_quantity in requested_quantities.items():
+        inventory = inventories_by_product_id.get(product_id)
 
-        if inventory is None or inventory.quantity_available < item.quantity:
+        if inventory is None or inventory.quantity_available < requested_quantity:
             # choice: 409 rather than 404; tells us the product exists,
             # but its current inventory state conflicts with the requested
             # operation.
@@ -66,9 +73,10 @@ async def create_order(
                 detail="Insufficient inventory for one or more products.",
             )
 
-    for item in order.items:
-        inventory = inventories_by_product_id[item.product_id]
-        inventory.quantity_available -= item.quantity
+    # deduct stock only after every product passes validation
+    for product_id, requested_quantity in requested_quantities.items():
+        inventory = inventories_by_product_id[product_id]
+        inventory.quantity_available -= requested_quantity
 
     new_order = Order(
         status="pending",

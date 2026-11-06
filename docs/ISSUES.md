@@ -10,7 +10,7 @@ _Last updated: 2026-11-05 (branch `feat/inventory-row-locking`)._
 | ID | Title | Severity | Phase | Status |
 | --- | --- | --- | --- | --- |
 | [ISS-001](#iss-001) | Overselling race condition in order creation | High | 5 | In progress |
-| [ISS-002](#iss-002) | Lock test passes without testing anything | High | 5 | Open |
+| [ISS-002](#iss-002) | Lock test passes without testing anything | High | 5 | Fixed |
 | [ISS-003](#iss-003) | Inventory-row lock test is empty | High | 5 | Open |
 | [ISS-004](#iss-004) | Ruff checks fail on the working tree | Medium | 5 | Open |
 | [ISS-005](#iss-005) | Test fixtures cannot exercise concurrency | Medium | 5 | Open |
@@ -24,7 +24,7 @@ _Last updated: 2026-11-05 (branch `feat/inventory-row-locking`)._
 | [ISS-013](#iss-013) | Order creation logic lives entirely in the endpoint | Low | 11 / 12 | Open |
 | [ISS-014](#iss-014) | Dockerfile is development-only | Low | 13 | Open |
 | [ISS-015](#iss-015) | Stale TODO comment on `Product.inventory` | Low | 2 | Open |
-| [ISS-016](#iss-016) | Test suite not verified during the last audit | Medium | 5 | Open |
+| [ISS-016](#iss-016) | Test suite not verified during the last audit | Medium | 5 | Fixed |
 | [ISS-017](#iss-017) | CI does not cover the test-database setup locally | Low | 13 | Open |
 
 ---
@@ -43,13 +43,15 @@ _Last updated: 2026-11-05 (branch `feat/inventory-row-locking`)._
 
 ## ISS-002: Lock test passes without testing anything
 
-**Severity:** High · **Phase:** 5 · **Status:** Open
+**Severity:** High · **Phase:** 5 · **Status:** Fixed
 
 **What:** in `test_second_transaction_waits_for_row_lock` ([test_order_concurrency.py](../tests/test_order_concurrency.py)), `second_transaction` and the task-creation and assertion block are indented inside `first_transaction`. The test function only defines a coroutine and returns, so no assertion runs.
 
 **Why it matters:** a green test that cannot fail gives false confidence. It also uses an advisory lock, not a row lock, so it does not demonstrate `FOR UPDATE`.
 
 **Fix direction:** dedent the second function and the orchestration block into the test body. Then prove the test can fail (for example, make the second transaction not wait and confirm it goes red). Consider renaming it to say it is an advisory-lock warm-up.
+
+**Result (2026-11-05):** dedented; added a `second_is_asking` event and a 0.5s `pytest.raises(TimeoutError)` window so the check cannot run before B has tried; renamed to `test_second_transaction_waits_for_advisory_lock`. Verified by mutation: removing A's `release_first.wait()` and removing B's lock query both turn the test red (`DID NOT RAISE`). Lesson: a negative assertion ("X did not happen") needs a time window, and a test is only trusted once it has been seen to fail.
 
 ## ISS-003: Inventory-row lock test is empty
 
@@ -66,7 +68,7 @@ _Last updated: 2026-11-05 (branch `feat/inventory-row-locking`)._
 **What:**
 - [test_orders.py](../tests/test_orders.py) line 1 has a stray `from unittest import result` (an accidental IDE auto-import). It shadows the local `result` variables and causes 1 import-order error, 1 unused-import error, and 9 redefinition errors.
 - `product= Product(` in `test_create_order_rejects_duplicate_items_exceeding_stock` fails `ruff format`.
-- `test_order_concurrency.py` fails `ruff format`.
+- `test_order_concurrency.py` failed `ruff format` (now fixed).
 
 **Why it matters:** CI runs `ruff check` and `ruff format --check`, so a PR would fail. `HEAD` itself was clean; these come from uncommitted changes.
 
@@ -164,11 +166,13 @@ _Last updated: 2026-11-05 (branch `feat/inventory-row-locking`)._
 
 ## ISS-016: Test suite not verified during the last audit
 
-**Severity:** Medium · **Phase:** 5 · **Status:** Open
+**Severity:** Medium · **Phase:** 5 · **Status:** Fixed
 
 **What:** the audit on 2026-11-05 could not run the suite against PostgreSQL because Docker was not running. Only static review and Ruff were done. The "Run the test suite" tick in Phase 4 therefore has not been re-confirmed since the uncommitted changes.
 
 **Fix direction:** `docker compose up -d`, ensure the test database exists and is migrated (see README), then `uv run pytest`. Record the result here.
+
+**Result (2026-11-05):** test DB confirmed reachable and migrated; full suite ran with 22 tests passing. Note that two of the three concurrency tests pass vacuously (ISS-002, ISS-003), so green does not yet mean the locking behaviour is verified.
 
 ## ISS-017: Local test-database setup is undocumented in code
 
